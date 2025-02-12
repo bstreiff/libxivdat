@@ -157,6 +157,7 @@ pub fn get_default_max_size_for_type_and_version(file_type: &DATType, file_versi
 
         (DATType::Keybind, 0x65) => Some(20480),
 
+        (DATType::LogFilter, 0x02) => Some(2048),
         (DATType::LogFilter, 0x03) => Some(2048),
 
         (DATType::Macro, 0x02) => Some(286720),
@@ -207,6 +208,26 @@ mod tests {
         (DATType::UISAVE, "./resources/default_dats/UISAVE.DAT"),
     ];
 
+    const VERSIONED_FILE_MAP: [(DATType, &str, u16); 17] = [
+        (DATType::ACQ, "./resources/versioned/ACQ_64.DAT", 0x64),
+        (DATType::GEARSET, "./resources/versioned/GEARSET_6A.DAT", 0x6A),
+        (DATType::GEARSET, "./resources/versioned/GEARSET_6B.DAT", 0x6B),
+        (DATType::GEARSET, "./resources/versioned/GEARSET_6C.DAT", 0x6C),
+        (DATType::GEARSET, "./resources/versioned/GEARSET_6D.DAT", 0x6D),
+        (DATType::GS, "./resources/versioned/GS_66.DAT", 0x66),
+        (DATType::GS, "./resources/versioned/GS_67.DAT", 0x67),
+        (DATType::ITEMFDR, "./resources/versioned/ITEMFDR_C8.DAT", 0xC8),
+        (DATType::ITEMFDR, "./resources/versioned/ITEMFDR_C9.DAT", 0xC9),
+        (DATType::ITEMFDR, "./resources/versioned/ITEMFDR_CA.DAT", 0xCA),
+        (DATType::ITEMODR, "./resources/versioned/ITEMODR_67.DAT", 0x67),
+        (DATType::ITEMODR, "./resources/versioned/ITEMODR_68.DAT", 0x68),
+        (DATType::KEYBIND, "./resources/versioned/KEYBIND_65.DAT", 0x65),
+        (DATType::LOGFLTR, "./resources/versioned/LOGFLTR_02.DAT", 0x02),
+        (DATType::LOGFLTR, "./resources/versioned/LOGFLTR_03.DAT", 0x03),
+        (DATType::MACRO, "./resources/versioned/MACRO_02.DAT", 0x02),
+        (DATType::UISAVE, "./resources/versioned/UISAVE_01.DAT", 0x01),
+    ];
+
     #[test]
     fn test_from_header_bytes() -> Result<(), String> {
         for case in FILE_TYPE_MAP.iter() {
@@ -240,6 +261,17 @@ mod tests {
     fn test_get_default_max_size_for_type() -> Result<(), String> {
         for case in FILE_TYPE_MAP.iter() {
             match get_default_max_size_for_type(&case.0) {
+                Some(_) => (),
+                None => return Err(format!("No value returned for case {}.", case.1)),
+            };
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_default_max_size_for_type_and_version() -> Result<(), String> {
+        for case in VERSIONED_FILE_MAP.iter() {
+            match get_default_max_size_for_type_and_version(&case.0, case.2) {
                 Some(_) => (),
                 None => return Err(format!("No value returned for case {}.", case.1)),
             };
