@@ -1,5 +1,5 @@
 /// Enumeration of known FFXIV DAT file types.
-/// The value of each element represents the first 4 header bytes as a little-endian i32.
+/// The value of each element represents the first 2 header bytes as a little-endian i32.
 /// These bytes are known static values that differentiate file types.
 ///
 /// File types may be referenced using a human readable descriptor -- `DATType::GoldSaucer` --
@@ -8,25 +8,25 @@
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DATType {
     /// GEARSET.DAT
-    Gearset = 0x006b0005,
+    Gearset = 0x0005,
     /// GS.DAT
-    GoldSaucer = 0x0067000A,
+    GoldSaucer = 0x000A,
     /// HOTBAR.DAT
-    Hotbar = 0x00040002,
+    Hotbar = 0x0002,
     /// ITEMFDR.DAT
-    ItemFinder = 0x00CA0008,
+    ItemFinder = 0x0008,
     /// ITEMODR.DAT
-    ItemOrder = 0x00670007,
+    ItemOrder = 0x0007,
     /// KEYBIND.DAT
-    Keybind = 0x00650003,
+    Keybind = 0x0003,
     /// LOGFLTR.DAT
-    LogFilter = 0x00030004,
+    LogFilter = 0x0004,
     /// MACRO.DAT (Character) & MACROSYS.DAT (Global)
-    Macro = 0x00020001,
+    Macro = 0x0001,
     /// ACQ.DAT (Acquaintances?)
-    RecentTells = 0x00640006,
+    RecentTells = 0x0006,
     /// UISAVE.DAT
-    UISave = 0x00010009,
+    UISave = 0x0009,
     Unknown = 0,
 }
 
@@ -125,18 +125,67 @@ pub fn get_default_end_byte_for_type(file_type: &DATType) -> Option<u8> {
 /// let max_size = get_default_max_size_for_type(&DATType::Macro).unwrap();
 /// ```
 pub fn get_default_max_size_for_type(file_type: &DATType) -> Option<u32> {
-    match file_type {
-        DATType::Gearset => Some(44849),
-        DATType::GoldSaucer => Some(649),
-        DATType::Hotbar => Some(204800),
-        DATType::ItemFinder => Some(14030),
-        DATType::ItemOrder => Some(15193),
-        DATType::Keybind => Some(20480),
-        DATType::LogFilter => Some(2048),
-        DATType::Macro => Some(286720),
-        DATType::RecentTells => Some(2048),
-        DATType::UISave => Some(64512),
+    get_default_max_size_for_type_and_version(file_type, get_default_file_version(file_type))
+}
+
+/// Gets the default maximum content size of a DAT file for a given type.
+/// Returns `None` if the file is of unknown type or has no standard size.
+///
+/// # Examples
+/// ```rust
+/// use libxivdat::dat_type::{DATType, get_default_max_size_for_type_and_version};
+/// let max_size = get_default_max_size_for_type_and_version(&DATType::Macro, 2).unwrap();
+/// ```
+pub fn get_default_max_size_for_type_and_version(file_type: &DATType, file_version: u16) -> Option<u32> {
+    match (file_type, file_version) {
+        (DATType::Gearset, 0x6A) => Some(45253),
+        (DATType::Gearset, 0x6B) => Some(44849),
+        (DATType::Gearset, 0x6C) => Some(45253),
+        (DATType::Gearset, 0x6D) => Some(45657),
+
+        (DATType::GoldSaucer, 0x66) => Some(629),
+        (DATType::GoldSaucer, 0x67) => Some(649),
+
+        (DATType::Hotbar, 0x04) => Some(204800),
+
+        (DATType::ItemFinder, 0xC8) => Some(12411),
+        (DATType::ItemFinder, 0xC9) => Some(13219),
+        (DATType::ItemFinder, 0xCA) => Some(14030),
+
+        (DATType::ItemOrder, 0x67) => Some(15193),
+        (DATType::ItemOrder, 0x68) => Some(15103),
+
+        (DATType::Keybind, 0x65) => Some(20480),
+
+        (DATType::LogFilter, 0x03) => Some(2048),
+
+        (DATType::Macro, 0x02) => Some(286720),
+
+        (DATType::RecentTells, 0x64) => Some(2048),
+
+        (DATType::UISave, 0x01) => Some(64512),
         _ => None,
+    }
+}
+
+/// Return a "default" file version for a DAT file type.
+///
+/// File versions are in flux and may be incremented by later patches to the game. The versions returned
+/// here are the versions used in test data at the time of libxivdat's development (Patch 5.5) and may not
+/// correspond to the current release.
+pub fn get_default_file_version(dat_type: &DATType) -> u16 {
+    match dat_type {
+        DATType::Gearset => 0x6B,
+        DATType::GoldSaucer => 0x67,
+        DATType::Hotbar => 0x04,
+        DATType::ItemFinder => 0xCA,
+        DATType::ItemOrder => 0x67,
+        DATType::Keybind => 0x65,
+        DATType::LogFilter => 0x03,
+        DATType::Macro => 0x02,
+        DATType::RecentTells => 0x64,
+        DATType::UISave => 0x01,
+        _ => 0x00,
     }
 }
 
@@ -165,13 +214,13 @@ mod tests {
                 Ok(file) => file,
                 Err(err) => return Err(format!("Error opening file: {}", err)),
             };
-            let mut buf = [0u8; 4];
+            let mut buf = [0u8; 2];
             match file.read(&mut buf) {
                 Ok(_) => (),
                 Err(err) => return Err(format!("Error reading file: {}", err)),
             };
-            let id_bytes = u32::from_le_bytes(buf);
-            assert_eq!(DATType::from(id_bytes), case.0);
+            let id_bytes = u16::from_le_bytes(buf);
+            assert_eq!(DATType::from(id_bytes as u32), case.0);
         }
         Ok(())
     }

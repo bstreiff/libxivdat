@@ -14,6 +14,8 @@ pub const HEADER_SIZE: u32 = 0x11;
 const MAX_SIZE_OFFSET: u32 = 32;
 /// Index of the `file_type` header record.
 const INDEX_FILE_TYPE: usize = 0x00;
+/// Index of the `file_version` header record.
+const INDEX_FILE_VERSION: usize = 0x02;
 /// Index of the `max_size` header record.
 const INDEX_MAX_SIZE: usize = 0x04;
 /// Index of the `content_size` header record.
@@ -54,6 +56,8 @@ pub struct DATFile {
     content_size: u32,
     /// Type of the file. This will be inferred from the header when converting directly from a `File`.
     file_type: DATType,
+    /// Version of the file.
+    file_version: u16,
     /// A single byte that marks the end of the header. This is `0xFF` for most DAT files, but occasionally varies.
     /// The purpose of this byte is unknown.
     header_end_byte: u8,
@@ -200,6 +204,13 @@ impl DATFile {
         self.content_size
     }
 
+    /// Creates a new DAT file of a default version with an empty content block in read/write mode.
+    ///
+    /// See [create_with_version].
+    pub fn create<P: AsRef<Path>>(path: P, dat_type: DATType) -> Result<Self, DATError> {
+        Self::create_with_version(path, dat_type, get_default_file_version(&dat_type))
+    }
+
     /// Creates a new DAT file with an empty content block in read/write mode.
     /// This will truncate an existing file if one exists at the specified path.
     ///
@@ -224,12 +235,22 @@ impl DATFile {
     /// # let temp_dir = tempdir().unwrap();
     /// # let path = temp_dir.path().join("TEST.DAT");
     ///
-    /// let mut dat_file = DATFile::create(&path, DATType::Macro);
+    /// let mut dat_file = DATFile::create_with_version(&path, DATType::Macro, 0x02);
     /// ```
-    pub fn create<P: AsRef<Path>>(path: P, dat_type: DATType) -> Result<Self, DATError> {
+    pub fn create_with_version<P: AsRef<Path>>(path: P, dat_type: DATType, dat_version: u16) -> Result<Self, DATError> {
         let max_size = get_default_max_size_for_type(&dat_type).unwrap_or(0);
         let end_byte = get_default_end_byte_for_type(&dat_type).unwrap_or(0);
-        Self::create_unsafe(path, dat_type, 1, max_size, end_byte)
+        Self::create_with_version_unsafe(path, dat_type, dat_version, 1, max_size, end_byte)
+    }
+
+    /// Creates a new DAT file of a default version with a null-padded content bock of the specifed size in
+    /// read/write mode.
+    ///
+    /// See [create_with_version_unsafe].
+    pub fn create_unsafe<P: AsRef<Path>>(
+        path: P, dat_type: DATType, content_size: u32, max_size: u32, end_byte: u8,
+    ) -> Result<Self, DATError> {
+        Self::create_with_version_unsafe(path, dat_type, get_default_file_version(&dat_type), content_size, max_size, end_byte)
     }
 
     /// Creates a new DAT file with a null-padded content bock of the specifed size in read/write mode.
@@ -257,8 +278,8 @@ impl DATFile {
     /// // Create an empty (content length 1) macro file with a custom max size and end byte. This probably isn't valid.
     /// let mut dat_file = DATFile::create_unsafe(&path, DATType::Macro, 1, 1024, 0x01);
     /// ```
-    pub fn create_unsafe<P: AsRef<Path>>(
-        path: P, dat_type: DATType, content_size: u32, max_size: u32, end_byte: u8,
+    pub fn create_with_version_unsafe<P: AsRef<Path>>(
+        path: P, dat_type: DATType, dat_version: u16, content_size: u32, max_size: u32, end_byte: u8,
     ) -> Result<Self, DATError> {
         // Create a minimal content size 0 DAT file, then reopen it as a DATFile.
         {
@@ -266,7 +287,10 @@ impl DATFile {
             raw_file.set_len((max_size + MAX_SIZE_OFFSET) as u64)?;
             // Write header type
             raw_file.seek(SeekFrom::Start(INDEX_FILE_TYPE as u64))?;
-            raw_file.write_all(&(dat_type as i32).to_le_bytes())?;
+            raw_file.write_all(&(dat_type as i16).to_le_bytes())?;
+            // Write header version
+            raw_file.seek(SeekFrom::Start(INDEX_FILE_VERSION as u64))?;
+            raw_file.write_all(&(dat_version as i16).to_le_bytes())?;
             // Write header max_size
             raw_file.seek(SeekFrom::Start(INDEX_MAX_SIZE as u64))?;
             raw_file.write_all(&max_size.to_le_bytes())?;
@@ -282,6 +306,13 @@ impl DATFile {
         // Write the content block and content_size header.
         dat_file.set_content_size(content_size)?;
         Ok(dat_file)
+    }
+
+    /// Creates a new DAT file of a default version with a specific content block in read/write mode.
+    ///
+    /// See [create_with_content_and_version].
+    pub fn create_with_content<P: AsRef<Path>>(path: P, dat_type: DATType, content: &[u8]) -> Result<Self, DATError> {
+        Self::create_with_content_and_version(path, dat_type, get_default_file_version(&dat_type), content)
     }
 
     /// Creates a new DAT file with a specific content block in read/write mode.
@@ -318,10 +349,10 @@ impl DATFile {
     ///
     /// let mut dat_file = DATFile::create_with_content(&path, DATType::Macro, b"Not really a macro.");
     /// ```
-    pub fn create_with_content<P: AsRef<Path>>(path: P, dat_type: DATType, content: &[u8]) -> Result<Self, DATError> {
+    pub fn create_with_content_and_version<P: AsRef<Path>>(path: P, dat_type: DATType, dat_version: u16, content: &[u8]) -> Result<Self, DATError> {
         let max_size = get_default_max_size_for_type(&dat_type).unwrap_or(0);
         let end_byte = get_default_end_byte_for_type(&dat_type).unwrap_or(0);
-        let mut dat_file = Self::create_unsafe(path, dat_type, 1, max_size, end_byte)?;
+        let mut dat_file = Self::create_with_version_unsafe(path, dat_type, dat_version, 1, max_size, end_byte)?;
         dat_file.write_all(&content)?;
         dat_file.seek(SeekFrom::Start(0))?;
         Ok(dat_file)
@@ -343,6 +374,23 @@ impl DATFile {
     /// ```
     pub fn file_type(&self) -> DATType {
         self.file_type
+    }
+
+    /// Returns the file type of the DAT file.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use libxivdat::dat_file::DATFile;
+    ///
+    /// let mut dat_file = DATFile::open("./resources/TEST_XOR.DAT").unwrap();
+    /// match dat_file.file_version() {
+    ///     2 => println!("Sure we can do this"),
+    ///     _ => panic!("Unknown version")
+    /// }
+    /// ```
+    pub fn file_version(&self) -> u16 {
+        self.file_version
     }
 
     /// Returns the terminating byte of the DAT file's
@@ -410,10 +458,11 @@ impl DATFile {
         let mut raw_file = File::open(path)?;
         let mut header_bytes = [0u8; HEADER_SIZE as usize];
         raw_file.read_exact(&mut header_bytes)?;
-        let (file_type, max_size, content_size, header_end_byte) = get_header_contents(&header_bytes)?;
+        let (file_type, file_version, max_size, content_size, header_end_byte) = get_header_contents(&header_bytes)?;
         Ok(DATFile {
             content_size,
             file_type,
+            file_version,
             header_end_byte,
             max_size,
             raw_file,
@@ -446,10 +495,11 @@ impl DATFile {
         let mut raw_file = options.open(path)?;
         let mut header_bytes = [0u8; HEADER_SIZE as usize];
         raw_file.read_exact(&mut header_bytes)?;
-        let (file_type, max_size, content_size, header_end_byte) = get_header_contents(&header_bytes)?;
+        let (file_type, file_version, max_size, content_size, header_end_byte) = get_header_contents(&header_bytes)?;
         Ok(DATFile {
             content_size,
             file_type,
+            file_version,
             header_end_byte,
             max_size,
             raw_file,
@@ -658,35 +708,43 @@ pub fn check_type<P: AsRef<Path>>(path: P) -> Result<DATType, DATError> {
 /// let mut header_bytes = [0u8; HEADER_SIZE as usize];
 /// let mut file = File::open("./resources/TEST.DAT").unwrap();
 /// file.read(&mut header_bytes).unwrap();
-/// let (file_type, max_size, content_size, end_byte) = get_header_contents(&mut header_bytes).unwrap();
+/// let (file_type, file_version, max_size, content_size, end_byte) = get_header_contents(&mut header_bytes).unwrap();
 /// ```
 ///
 /// # Data Structure
 /// ```text
 /// 0                                               1
 /// 0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f  0  
-/// |-+-++-+-|  |-+-++-+-|  |-+-++-+-|  |-+-++-+-|  |
-/// |           |           |           |           \_ u8 header_end_byte
-/// |           |           |           |              0xFF for all ^0x73 files, unique static values for ^0x31
-/// |           |           |           \_ null
-/// |           |           |              reserved?
-/// |           |           \_ u32le content_size
-/// |           |              (includes terminating null byte)
-/// |           \_ u32le max_size
-/// |              max content_size allowed; size on disk - 32 -> 17 byte header + minimum 15-byte null pad footer
-/// \_ u32le file_type
-///    constant value(s) per file type; probably actually 2 distinct bytes -> always <byte null byte null>
+/// |--|  |--|  |-+-++-+-|  |-+-++-+-|  |-+-++-+-|  |
+/// |     |     |           |           |           \_ u8 header_end_byte
+/// |     |     |           |           |              0xFF for all ^0x73 files, unique static values for ^0x31
+/// |     |     |           |           \_ null
+/// |     |     |           |              reserved?
+/// |     |     |           \_ u32le content_size
+/// |     |     |              (includes terminating null byte)
+/// |     |     \_ u32le max_size
+/// |     |        max content_size allowed; size on disk - 32 -> 17 byte header + minimum 15-byte null pad footer
+/// |     \_ u16le file_version
+/// |              data format version for this file's content
+/// \_ u16le file_type
+///    constant value(s) per file type
 /// ```
-pub fn get_header_contents(header: &[u8; HEADER_SIZE as usize]) -> Result<(DATType, u32, u32, u8), DATError> {
+pub fn get_header_contents(header: &[u8; HEADER_SIZE as usize]) -> Result<(DATType, u16, u32, u32, u8), DATError> {
     // If these fail, something is very wrong.
-    let file_type_id = u32::from_le_bytes(header[INDEX_FILE_TYPE..INDEX_MAX_SIZE].try_into()?);
+    let file_type_id = u16::from_le_bytes(header[INDEX_FILE_TYPE..INDEX_FILE_VERSION].try_into()?) as u32;
+    let file_version = u16::from_le_bytes(header[INDEX_FILE_VERSION..INDEX_MAX_SIZE].try_into()?);
     let max_size = u32::from_le_bytes(header[INDEX_MAX_SIZE..INDEX_CONTENT_SIZE].try_into()?);
     let content_size = u32::from_le_bytes(header[INDEX_CONTENT_SIZE..INDEX_CONTENT_SIZE + 4].try_into()?);
     let end_byte = header[HEADER_SIZE as usize - 1];
 
     // Validate that file type id bytes are present.
-    if 0xff00ff00 & file_type_id > 0 {
+    if 0xff00 & file_type_id > 0 {
         return Err(DATError::BadHeader("File type ID bytes are absent."));
+    }
+
+    // Validate that file version bytes are present.
+    if 0xff00 & file_version > 0 {
+        return Err(DATError::BadHeader("File version bytes are absent."));
     }
 
     // Validate that sizes make sense.
@@ -694,7 +752,7 @@ pub fn get_header_contents(header: &[u8; HEADER_SIZE as usize]) -> Result<(DATTy
         return Err(DATError::BadHeader("Content size exceeds max size in header."));
     }
 
-    Ok((DATType::from(file_type_id), max_size, content_size, end_byte))
+    Ok((DATType::from(file_type_id), file_version, max_size, content_size, end_byte))
 }
 
 /// Attempts to read the entire content block of a DAT file, returning a byte vector.
@@ -808,11 +866,12 @@ mod tests {
         let header_bytes = [
             0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF,
         ];
-        let (dat_type, max_size, content_size, end_byte) = match get_header_contents(&header_bytes) {
-            Ok(res) => (res.0, res.1, res.2, res.3),
+        let (dat_type, dat_version, max_size, content_size, end_byte) = match get_header_contents(&header_bytes) {
+            Ok(res) => (res.0, res.1, res.2, res.3, res.4),
             Err(err) => return Err(format!("{}", err)),
         };
         assert_eq!(dat_type, DATType::Unknown);
+        assert_eq!(dat_version, 0x0000);
         assert_eq!(max_size, 2);
         assert_eq!(content_size, 2);
         assert_eq!(end_byte, 0xFF);
