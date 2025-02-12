@@ -27,6 +27,7 @@ harness = true
 [features]
 high-level = []
 macro = ["high-level"]
+gearset = ["high-level"]
 
 [dependencies]
 
