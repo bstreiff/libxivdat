@@ -29,6 +29,8 @@ pub enum DATError {
     IncorrectType(&'static str),
     /// Invalid input for a function
     InvalidInput(&'static str),
+    /// Unsupported file version
+    UnsupportedFileVersion(&'static str),
 }
 
 impl fmt::Display for DATError {
@@ -42,6 +44,7 @@ impl fmt::Display for DATError {
             DATError::FileIO(e) => write!(f, "File IO error: {:?}", e.source()),
             DATError::IncorrectType(desc) => write!(f, "Incorrect DAT file type: {}", desc),
             DATError::InvalidInput(desc) => write!(f, "Invalid input: {}", desc),
+            DATError::UnsupportedFileVersion(desc) => write!(f, "Unsupported file version: {}", desc),
         }
     }
 }
