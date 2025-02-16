@@ -206,5 +206,12 @@ pub mod section;
 pub mod xiv_macro {
     pub use crate::high_level_modules::r#macro::*;
 }
+/// Contains the high-level toolkit for working with gearset files, `GEARSET.DAT`
+///
+/// TODO write more here
+#[cfg(feature = "gearset")]
+pub mod xiv_gearset {
+    pub use crate::high_level_modules::gearset::*;
+}
 /// High-level, file-type-specific submodules container.
 mod high_level_modules;

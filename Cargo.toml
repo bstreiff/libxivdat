@@ -30,6 +30,7 @@ macro = ["high-level"]
 gearset = ["high-level"]
 
 [dependencies]
+bitflags = "2.8.0"
 
 [dev-dependencies]
 tempfile = "3.2.0"
